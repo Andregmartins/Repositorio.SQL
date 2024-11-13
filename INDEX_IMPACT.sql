@@ -1,3 +1,12 @@
+/*********************************************************************************************
+INDEX_IMPACT v0.1 (2024-11-13)
+(C) 2024, André Martins
+
+Feedback: mailto:andre.martins@gmail.com
+
+License: 
+	https://github.com/Andregmartins/Repositorio.SQL/edit/main/INDEX_IMPACT.sql
+*********************************************************************************************/
 SELECT  sys.objects.schema_id, sys.objects.object_id, sys.objects.name
 , (avg_total_user_cost * avg_user_impact) * (user_seeks + user_scans) AS Impact
 ,  'CREATE NONCLUSTERED INDEX IX01_'+sys.objects.name+ ' on' + sys.objects.name COLLATE DATABASE_DEFAULT + ' ( ' + IsNull(mid.equality_columns, '') + CASE WHEN mid.inequality_columns IS NULL 
