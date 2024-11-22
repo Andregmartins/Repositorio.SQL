@@ -1,0 +1,17 @@
+/*********************************************************************************************
+Kill session v0.1 (2024-11-21)
+(C) 2024, André Martins
+
+Feedback: mailto:andre.martins@gmail.com
+
+License: 
+	https://github.com/Andregmartins/Repositorio.SQL/edit/main/Kill session.sql
+*********************************************************************************************/
+
+
+DECLARE @kill varchar(8000) = '';  
+SELECT @kill = @kill + 'kill ' + CONVERT(varchar(5), session_id) + ';'  
+FROM sys.dm_exec_sessions
+WHERE database_id  = db_id('base name')
+
+EXEC(@kill);
