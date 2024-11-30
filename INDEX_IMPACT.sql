@@ -1,4 +1,12 @@
-SELECT  sys.objects.schema_id, sys.objects.object_id, sys.objects.name
+/*********************************************************************************************
+backup_historico_mostra_caminho v0.1 (2024-11-29)
+(C) 2024, André Martins
+
+Feedback: mailto:andre.martins@gmail.com
+
+License: 
+	https://github.com/Andregmartins/Repositorio.SQL/edit/main/INDEX_IMPACT.sql
+*********************************************************************************************/SELECT  sys.objects.schema_id, sys.objects.object_id, sys.objects.name
 , (avg_total_user_cost * avg_user_impact) * (user_seeks + user_scans) AS Impact
 ,  'CREATE NONCLUSTERED INDEX IX01_'+sys.objects.name+ ' on' + sys.objects.name COLLATE DATABASE_DEFAULT + ' ( ' + IsNull(mid.equality_columns, '') + CASE WHEN mid.inequality_columns IS NULL 
                 THEN ''  
