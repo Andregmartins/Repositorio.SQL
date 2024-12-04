@@ -1,4 +1,10 @@
-
+/*********************************************************************************************
+Shema  em utilização v0.1 (2024-11-29)
+(C) 2024, André Martins
+Feedback: mailto:andre.martins@gmail.com
+License: 
+	https://github.com/Andregmartins/Repositorio.SQL/edit/main/SHEMAS.sql
+*********************************************************************************************/
 
 USE 'nome da base';  
 SELECT TABLE_SCHEMA, TABLE_NAME  
