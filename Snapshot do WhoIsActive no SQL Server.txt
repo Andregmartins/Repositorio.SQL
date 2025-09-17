@@ -1,0 +1,221 @@
+--- Snapshot do WhoIsActive no SQL Server
+
+--- 1. Criação do Banco de Dados Traces
+
+
+USE master
+GO
+
+-- Cria o banco Traces, caso não exista
+IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = N'Traces')
+BEGIN
+    CREATE DATABASE Traces;
+    PRINT 'Banco Traces criado com sucesso.';
+END
+ELSE
+BEGIN
+    PRINT 'Banco Traces já existe.';
+END
+GO
+
+-- Define o modelo de recuperação como Simple (opcional, para logs menores)
+ALTER DATABASE Traces SET RECOVERY SIMPLE;
+GO
+
+--- 2. Criação da Tabela de Armazenamento
+
+
+USE Traces
+GO
+
+-- Remove a tabela se já existir
+IF OBJECT_ID('Resultado_WhoisActive') IS NOT NULL
+    DROP TABLE Resultado_WhoisActive;
+
+-- Criação da tabela
+CREATE TABLE Resultado_WhoisActive (
+    Dt_Log DATETIME,                    -- Data e hora da coleta
+    [dd hh:mm:ss.mss] VARCHAR(8000),    -- Duração da execução
+    [database_name] VARCHAR(128),       -- Nome do banco de dados
+    [session_id] SMALLINT NOT NULL,     -- ID da sessão
+    blocking_session_id SMALLINT,       -- ID da sessão bloqueadora
+    [sql_text] XML,                     -- Texto do SQL em execução
+    [login_name] VARCHAR(128) NOT NULL, -- Nome do login
+    [wait_info] VARCHAR(4000),          -- Informações de espera
+    [status] VARCHAR(30) NOT NULL,      -- Status da sessão
+    [percent_complete] VARCHAR(30),     -- Percentual de conclusão
+    [host_name] VARCHAR(128),           -- Nome do host
+    [sql_command] XML,                  -- Comando SQL completo
+    [CPU] VARCHAR(100),                 -- Uso de CPU
+    [reads] VARCHAR(100),               -- Leituras
+    [writes] VARCHAR(100),              -- Escritas
+    [Program_Name] VARCHAR(100)         -- Nome do programa
+);
+
+
+---3. Criação do Job para Snapshot
+
+/****** Object:  Job [DBA - DBAInfra - Load  Whoisactive]    ******/
+BEGIN TRANSACTION
+DECLARE @ReturnCode INT
+SELECT @ReturnCode = 0
+/****** Object:  JobCategory [Database Maintenance]    Script Date: 04/23/2014 19:59:41 ******/
+IF NOT EXISTS (SELECT name FROM msdb.dbo.syscategories WHERE name=N'Database Maintenance' AND category_class=1)
+BEGIN
+EXEC @ReturnCode = msdb.dbo.sp_add_category @class=N'JOB', @type=N'LOCAL', @name=N'Database Maintenance'
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+
+END
+
+DECLARE @jobId BINARY(16)
+EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=N'DBA - DBAInfra - Load  Whoisactive, 
+        @enabled=1, 
+        @notify_level_eventlog=0, 
+        @notify_level_email=0, 
+        @notify_level_netsend=0, 
+        @notify_level_page=0, 
+        @delete_level=0, 
+        @description=N'No description available.', 
+        @category_name=N'Database Maintenance', 
+        @owner_login_name=N'sa', @job_id = @jobId OUTPUT
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+/****** Object:  Step [DBA - WhoisActive]    ******/
+EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=N'DBA - WhoisActive', 
+        @step_id=1, 
+        @cmdexec_success_code=0, 
+        @on_success_action=1, 
+        @on_success_step_id=0, 
+        @on_fail_action=2, 
+        @on_fail_step_id=0, 
+        @retry_attempts=0, 
+        @retry_interval=0, 
+        @os_run_priority=0, @subsystem=N'TSQL', 
+        @command=N'EXEC sp_WhoIsActive @get_outer_command = 1,
+            @output_column_list = ''[collection_time][d%][session_id][blocking_session_id][sql_text][login_name][wait_info][status][percent_complete]
+      [host_name][database_name][sql_command][CPU][reads][writes][program_name]'',
+    @destination_table = ''Resultado_WhoisActive''
+', 
+        @database_name=N'Traces', 
+        @flags=0
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule @job_id=@jobId, @name=N'DBA - WhoisActive', 
+        @enabled=1, 
+        @freq_type=4, 
+        @freq_interval=1, 
+        @freq_subday_type=4, 
+        @freq_subday_interval=1, 
+        @freq_relative_interval=0, 
+        @freq_recurrence_factor=0, 
+        @active_start_date=20140212, 
+        @active_end_date=99991231, 
+        @active_start_time=70000, 
+        @active_end_time=220000, 
+        @schedule_uid=N'c8a3eb26-b2ed-456d-8c4d-ae7c95e88163'
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+COMMIT TRANSACTION
+GOTO EndSave
+QuitWithRollback:
+    IF (@@TRANCOUNT > 0) ROLLBACK TRANSACTION
+EndSave:
+
+
+--- 4. Criação do Job para Exclusão de Registros Antigos
+
+USE [msdb]
+GO
+
+-- Remove o job se já existir
+IF EXISTS (SELECT job_id FROM msdb.dbo.sysjobs_view WHERE name = N'DBA - Purge WhoisActive')
+    EXEC msdb.dbo.sp_delete_job @job_name=N'DBA - Purge WhoisActive', @delete_unused_schedule=1;
+GO
+
+USE [msdb]
+GO
+
+BEGIN TRANSACTION
+DECLARE @ReturnCode INT
+SELECT @ReturnCode = 0
+
+-- Criação da categoria "Database Maintenance", se não existir
+IF NOT EXISTS (SELECT name FROM msdb.dbo.syscategories WHERE name=N'Database Maintenance' AND category_class=1)
+BEGIN
+    EXEC @ReturnCode = msdb.dbo.sp_add_category @class=N'JOB', @type=N'LOCAL', @name=N'Database Maintenance'
+    IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+END
+
+-- Criação do Job
+DECLARE @jobId BINARY(16)
+EXEC @ReturnCode = msdb.dbo.sp_add_job
+    @job_name=N'DBA - Purge WhoisActive',
+    @enabled=1,
+    @notify_level_eventlog=0,
+    @notify_level_email=0,
+    @notify_level_netsend=0,
+    @notify_level_page=0,
+    @delete_level=0,
+    @description=N'Job para excluir registros da tabela Resultado_WhoisActive com mais de 60 dias.',
+    @category_name=N'Database Maintenance',
+    @owner_login_name=N'sa',
+    @job_id = @jobId OUTPUT
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+
+-- Adicionar o passo para excluir registros antigos
+EXEC @ReturnCode = msdb.dbo.sp_add_jobstep
+    @job_id=@jobId,
+    @step_name=N'Purge_Old_Records',
+    @step_id=1,
+    @cmdexec_success_code=0,
+    @on_success_action=1,
+    @on_success_step_id=0,
+    @on_fail_action=2,
+    @on_fail_step_id=0,
+    @retry_attempts=0,
+    @retry_interval=0,
+    @os_run_priority=0,
+    @subsystem=N'TSQL',
+    @command=N'DELETE FROM Traces..Resultado_WhoisActive
+        WHERE Dt_Log < DATEADD(DAY, -60, GETDATE());',
+    @database_name=N'Traces',
+    @flags=0
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+
+-- Configurar o início do job no primeiro passo
+EXEC @ReturnCode = msdb.dbo.sp_update_job
+    @job_id = @jobId,
+    @start_step_id = 1
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+
+-- Agendar execução semanal aos domingos às 01:00
+EXEC @ReturnCode = msdb.dbo.sp_add_jobschedule
+    @job_id=@jobId,
+    @name=N'Sunday_1AM',
+    @enabled=1,
+    @freq_type=8,              -- Semanal
+    @freq_interval=1,          -- Domingo (bitwise: 1 = Sunday)
+    @freq_subday_type=1,       -- Uma vez por dia
+    @freq_subday_interval=0,
+    @freq_relative_interval=0,
+    @freq_recurrence_factor=1, -- A cada 1 semana
+    @active_start_date=20250325, -- Início em 25/03/2025
+    @active_end_date=99991231,   -- Sem data de término
+    @active_start_time=10000,    -- 01:00 (1h da manhã)
+    @active_end_time=235959
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+
+-- Associar o job ao servidor local
+EXEC @ReturnCode = msdb.dbo.sp_add_jobserver
+    @job_id = @jobId,
+    @server_name = N'(local)'
+IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+
+COMMIT TRANSACTION
+GOTO EndSave
+
+QuitWithRollback:
+    IF (@@TRANCOUNT > 0) ROLLBACK TRANSACTION
+EndSave:
+GO
