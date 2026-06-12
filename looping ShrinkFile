@@ -1,3 +1,11 @@
+/*********************************************************************************************
+looping ShrinkFile v0.1 (2026-06-12)
+(C) 2024, André Martins
+Feedback: mailto:andregmartins@gmail.com
+License: 
+	https://github.com/Andregmartins/Repositorio.SQL/edit/main/looping%20ShrinkFile
+*********************************************************************************************/
+
 drop table #temp
 create table #temp (dbname varchar(100), filename varchar(1000))
 go
