@@ -2,7 +2,7 @@
 INDEX_IMPACT v0.1 (2024-11-13)
 (C) 2024, André Martins
 
-Feedback: mailto:andre.martins@gmail.com
+Feedback: mailto:andregmartins@gmail.com
 
 License: 
 	https://github.com/Andregmartins/Repositorio.SQL/edit/main/INDEX_IMPACT.sql
@@ -29,4 +29,4 @@ SELECT  sys.objects.schema_id, sys.objects.object_id, sys.objects.name
             FROM          sys.dm_db_missing_index_group_stats WITH (nolock) 
             ORDER BY (avg_total_user_cost * avg_user_impact) * (user_seeks + user_scans) DESC))  
         AND OBJECTPROPERTY(sys.objects.OBJECT_ID, 'isusertable')=1 
-    ORDER BY 4 DESC 
+    ORDER BY 4 DESC
