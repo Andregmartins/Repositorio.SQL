@@ -1,0 +1,13 @@
+drop table #temp
+create table #temp (dbname varchar(100), filename varchar(1000))
+go
+
+exec sp_msforeachdb
+'
+use [?]
+if db_id()>4 and db_name() not in (''DR'',''DBDBA'')
+begin
+    insert into #temp select db_name(), name from sysfiles where fileid=2
+end
+'
+select 'use ['+ dbname + '] ; dbcc ShrinkFile ('+ ''''+filename+''''+' ,3000);' from #temp
